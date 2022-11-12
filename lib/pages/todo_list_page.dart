@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:todo_list_windows/repositories/todo_repository.dart';
 import '../models/todo.dart';
 import '../widgets/todo_list_item.dart';
 
@@ -12,8 +13,24 @@ class TodoListPage extends StatefulWidget {
 class _TodoListPageState extends State<TodoListPage> {
 
   final TextEditingController todoController = TextEditingController();
+  final TodoRepository todoRepository = TodoRepository();
 
   List<Todo> todos = [];
+  Todo? deletedTodo;
+  int? deleteTodoPos;
+
+  String? errorText;
+
+  @override
+  void initState() {
+    super.initState();
+
+    todoRepository.getTodoList().then((value) {
+      setState(() {
+        todos = value;
+      });
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +51,16 @@ class _TodoListPageState extends State<TodoListPage> {
                           border: OutlineInputBorder(),
                           labelText: 'Adicione uma tarefa',
                           hintText: 'Ex. Estudar Flutter',
+                          errorText: errorText,
+                          focusedBorder: OutlineInputBorder(
+                            borderSide: BorderSide(
+                              color: Color(0xff00d7f3),
+                              width: 2,
+                            ),
+                          ),
+                          labelStyle: TextStyle(
+                            color: Color(0xff00d7f3),
+                          ),
                         ),
                       ),
                     ),
@@ -41,14 +68,29 @@ class _TodoListPageState extends State<TodoListPage> {
                     ElevatedButton(
                       onPressed: (){
                         String text = todoController.text;
+
+                        if(text.isEmpty){
+                          setState(() {
+                            errorText = 'O título não pode ser vazio!';
+                          });
+
+                          return;
+                        }
+
                         setState(() {
-                          Todo newTodo = new
-                          todos.add(text.);
+                          Todo newTodo = Todo(
+                              title: text,
+                              dateTime: DateTime.now(),
+                          );
+                          todos.add(newTodo);
+                          errorText = null;
                           todoController.clear();
+                          todoRepository.saveTodoList(todos);
                         });
                       },
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Color(0xff00d7f3),
+                          padding: EdgeInsets.all(19),
                       ),
                       child: Icon(
                         Icons.add,
@@ -62,9 +104,10 @@ class _TodoListPageState extends State<TodoListPage> {
                   child: ListView(
                     shrinkWrap: true,
                     children: [
-                      for(String todo in todos)
+                      for(Todo todo in todos)
                         TodoListItem(
-                          title: todo,
+                          todo: todo,
+                          onDelete: onDelete,
                         ),
                     ],
                   ),
@@ -78,9 +121,10 @@ class _TodoListPageState extends State<TodoListPage> {
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: () {},
+                      onPressed: showDeleteTodosConfirmationDialog,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Color(0xff00d7f3),
+                        padding: EdgeInsets.all(19),
                       ),
                         child: Text('Limpar tudo'),
                     ),
@@ -93,4 +137,71 @@ class _TodoListPageState extends State<TodoListPage> {
       ),
     );
   }
+
+  void onDelete(Todo todo){
+    deletedTodo = todo;
+    deleteTodoPos = todos.indexOf(todo);
+
+    setState(() {
+      todos.remove(todo);
+    });
+    todoRepository.saveTodoList(todos);
+
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Tarefa ${todo.title} foi removida com sucesso',
+          style: TextStyle(color: Color(0xff060708)),
+        ),
+        backgroundColor: Colors.white,
+        action: SnackBarAction(
+          label: 'Desfazer',
+          textColor: const Color(0xff00d7f3),
+          onPressed: () {
+            setState(() {
+              todos.insert(deleteTodoPos!, deletedTodo!);
+            });
+            todoRepository.saveTodoList(todos);
+          },
+        ),
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  void showDeleteTodosConfirmationDialog() {
+    showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text("Limpar tudo?"),
+          content: Text("Você tem certeza que deseja apagar todas as tarefas?"),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              style: TextButton.styleFrom(foregroundColor: Color(0xff00d7f3)),
+              child: Text("Cancelar"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                deleteAllTodos();
+              },
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: Text("Limpar Tudo"),
+            ),
+          ],
+        ),
+    );
+  }
+
+  void deleteAllTodos() {
+    setState(() {
+      todos.clear();
+    });
+    todoRepository.saveTodoList(todos);
+  }
+
 }
